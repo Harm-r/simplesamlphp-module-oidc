@@ -38,7 +38,7 @@ class FederationFactory
     public function build(): Federation
     {
         return new Federation(
-            supportedAlgorithms: $this->moduleConfig->getSupportedAlgorithms(),
+            supportedAlgorithms: $this->moduleConfig->getSupportedAlgorithms(includeMlDsa: true),
             maxCacheDuration: $this->moduleConfig->getFederationCacheMaxDurationForFetched(),
             timestampValidationLeeway: $this->moduleConfig->getTimestampValidationLeeway(),
             maxTrustChainDepth: $this->moduleConfig->getFederationMaxTrustChainDepth(),

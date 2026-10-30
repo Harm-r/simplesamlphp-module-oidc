@@ -6,7 +6,6 @@ namespace SimpleSAML\Module\oidc\Server;
 
 use Defuse\Crypto\Key;
 use League\OAuth2\Server\AuthorizationServer as OAuth2AuthorizationServer;
-use League\OAuth2\Server\CryptKey;
 use League\OAuth2\Server\CryptKeyInterface;
 use League\OAuth2\Server\Repositories\AccessTokenRepositoryInterface;
 use League\OAuth2\Server\Repositories\ClientRepositoryInterface;
@@ -62,7 +61,7 @@ class AuthorizationServer extends OAuth2AuthorizationServer
         ClientRepositoryInterface $clientRepository,
         AccessTokenRepositoryInterface $accessTokenRepository,
         ScopeRepositoryInterface $scopeRepository,
-        CryptKey|string $privateKey,
+        CryptKeyInterface|string $privateKey,
         Key|string $encryptionKey,
         ?ResponseTypeInterface $responseType = null,
         ?RequestRulesManager $requestRulesManager = null,

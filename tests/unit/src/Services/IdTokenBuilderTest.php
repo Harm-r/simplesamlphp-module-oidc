@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace SimpleSAML\Test\Module\oidc\unit\Services;
 
 use DateTimeImmutable;
+use Jose\Component\KeyManagement\JWKFactory;
 use League\OAuth2\Server\Entities\AccessTokenEntityInterface;
 use League\OAuth2\Server\Entities\ClientEntityInterface;
 use League\OAuth2\Server\Entities\UserEntityInterface;
@@ -22,6 +23,7 @@ use SimpleSAML\Module\oidc\ModuleConfig;
 use SimpleSAML\Module\oidc\Services\IdTokenBuilder;
 use SimpleSAML\Module\oidc\Utils\ClaimTranslatorExtractor;
 use SimpleSAML\Module\oidc\Utils\SubjectResolver;
+use SimpleSAML\OpenID\Algorithms\SignatureAlgorithmBag;
 use SimpleSAML\OpenID\Algorithms\SignatureAlgorithmEnum;
 use SimpleSAML\OpenID\Codebooks\ClaimsEnum;
 use SimpleSAML\OpenID\Core;
@@ -32,6 +34,9 @@ use SimpleSAML\OpenID\Helpers\Base64Url;
 use SimpleSAML\OpenID\Helpers\DateTime;
 use SimpleSAML\OpenID\Helpers\Random;
 use SimpleSAML\OpenID\Helpers\Type;
+use SimpleSAML\OpenID\Jwk\JwkDecorator;
+use SimpleSAML\OpenID\SupportedAlgorithms;
+use SimpleSAML\OpenID\ValueAbstracts\KeyPair;
 use SimpleSAML\OpenID\ValueAbstracts\SignatureKeyPair;
 use SimpleSAML\OpenID\ValueAbstracts\SignatureKeyPairBag;
 
@@ -499,6 +504,97 @@ class IdTokenBuilderTest extends TestCase
             $expectedAtHash,
             $this->sut()->generateAccessTokenHash($accessTokenMock, 'RS256'),
         );
+    }
+
+
+    public static function mlDsaHashProvider(): iterable
+    {
+        // OpenID token hash guide section 3, plus independent hashlib SHAKE256 vectors.
+        $vectors = [
+            'OpenID guide' => [
+                'YmJiZTAwYmYtMzgyOC00NzhkLTkyOTItNjJjNDM3MGYzOWIy9sFhvH8K_x8UIHj1osisS57f5DduL',
+                'sB_U72jyb0WgtX8TsVoqJnm6CD295W9gfSDRxkilB3I',
+            ],
+            'empty' => ['', 'RrndKwuojRMjOz_rdD7rJD_NUupiuBuCtQwnZG7Vdi8'],
+            'abc' => ['abc', 'SDNmYBNgqHccaGMIDMQRTY20RTD48eHuT5TqN-eLVzk'],
+            'multiple blocks' => [str_repeat('a', 200), '5JZHSRydEtElovdYJslvYwfS-r68u5-xYW12sJSZOA4'],
+        ];
+        $algorithms = [
+            SignatureAlgorithmEnum::MLDSA44,
+            SignatureAlgorithmEnum::MLDSA65,
+            SignatureAlgorithmEnum::MLDSA87,
+        ];
+        foreach ($algorithms as $algorithm) {
+            foreach ($vectors as $name => [$accessToken, $expected]) {
+                yield $algorithm->value . ' ' . $name => [$algorithm, $accessToken, $expected];
+            }
+        }
+    }
+
+
+    #[DataProvider('mlDsaHashProvider')]
+    public function testGeneratesMlDsaAccessTokenHash(
+        SignatureAlgorithmEnum $algorithm,
+        string $accessToken,
+        string $expected,
+    ): void {
+        $token = $this->createMock(AccessTokenEntity::class);
+        $token->method('toString')->willReturn($accessToken);
+
+        $this->assertSame($expected, $this->sut(core: new Core())->generateAccessTokenHash($token, $algorithm->value));
+    }
+
+
+    public static function mlDsaAlgorithmProvider(): array
+    {
+        return [
+            [SignatureAlgorithmEnum::MLDSA44],
+            [SignatureAlgorithmEnum::MLDSA65],
+            [SignatureAlgorithmEnum::MLDSA87],
+        ];
+    }
+
+
+    #[DataProvider('mlDsaAlgorithmProvider')]
+    public function testIssuesMlDsaIdTokenWithAccessTokenHash(SignatureAlgorithmEnum $algorithm): void
+    {
+        if (!$algorithm->isSupported()) {
+            $this->markTestSkipped($algorithm->value . ' is not supported by this PHP/OpenSSL runtime.');
+        }
+
+        $jwk = (new JWKFactory())->mldsa($algorithm->value);
+        $pair = new SignatureKeyPair(
+            $algorithm,
+            new KeyPair(new JwkDecorator($jwk), new JwkDecorator($jwk->toPublic()), 'mldsa-id-token'),
+        );
+        $config = $this->createMock(ModuleConfig::class);
+        $config->method('getProtocolSignatureKeyPairBag')->willReturn(new SignatureKeyPairBag($pair));
+        $config->method('getIssuer')->willReturn('https://op.example.org');
+        $core = new Core(supportedAlgorithms: new SupportedAlgorithms(new SignatureAlgorithmBag($algorithm)));
+        $this->clientEntityMock->method('getIdentifier')->willReturn('client123');
+        $this->accessTokenEntityMock->method('getSubject')->willReturn('subject123');
+        $this->accessTokenEntityMock->method('toString')->willReturn(
+            'YmJiZTAwYmYtMzgyOC00NzhkLTkyOTItNjJjNDM3MGYzOWIy9sFhvH8K_x8UIHj1osisS57f5DduL',
+        );
+        $this->accessTokenExpiryDateTimeMock->method('getTimestamp')->willReturn(time() + 600);
+
+        $token = $this->sut(core: $core, moduleConfig: $config)->buildFor(
+            $this->userEntityMock,
+            $this->accessTokenEntityMock,
+            false,
+            true,
+            null,
+            null,
+            null,
+            null,
+        );
+        $parsed = $core->idTokenFactory()->fromToken($token->getToken());
+        $parsed->verifyWithKeySet(['keys' => [$jwk->toPublic()->all()]]);
+
+        $this->assertSame($algorithm->value, $parsed->getHeaderClaim('alg'));
+        $this->assertSame('mldsa-id-token', $parsed->getKeyId());
+        $this->assertSame('subject123', $parsed->getSubject());
+        $this->assertSame('sB_U72jyb0WgtX8TsVoqJnm6CD295W9gfSDRxkilB3I', $parsed->getPayloadClaim('at_hash'));
     }
 
 

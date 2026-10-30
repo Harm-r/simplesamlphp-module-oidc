@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace SimpleSAML\Module\oidc\Factories;
 
-use League\OAuth2\Server\CryptKey;
+use League\OAuth2\Server\CryptKeyInterface;
 use SimpleSAML\Module\oidc\ModuleConfig;
 use SimpleSAML\Module\oidc\Repositories\AccessTokenRepository;
 use SimpleSAML\Module\oidc\Repositories\ClientRepository;
@@ -32,7 +32,7 @@ class AuthorizationServerFactory
         private readonly RefreshTokenGrant $refreshTokenGrant,
         private readonly TokenResponse $tokenResponse,
         private readonly RequestRulesManager $requestRulesManager,
-        private readonly CryptKey $privateKey,
+        private readonly CryptKeyInterface $privateKey,
         private readonly PreAuthCodeGrant $preAuthCodeGrant,
         private readonly LoggerService $loggerService,
         private readonly PushedAuthorizationRequestRepository $pushedAuthorizationRequestRepository,

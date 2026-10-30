@@ -216,6 +216,34 @@ changing PAR or request-object behaviour. The OpenID4VCI issuer plan below sends
 its authorization requests through PAR, so CI exercises the endpoint on that
 flow, but the plan is no substitute for the checklist.
 
+## ML-DSA (RFC 9964)
+
+ML-DSA follows the same requirements-to-tests approach as PAR. The applicable
+JOSE requirements, OpenID token-hash mapping, dependency responsibilities and
+remaining gaps are tracked in
+[rfc9964-mldsa-compliance.md](../conformance-tests/rfc9964-mldsa-compliance.md).
+The mapped cases run in the existing PHPUnit unit suite and include real key
+loading, signing, verification and JWKS controller responses.
+
+The reviewed conformance-suite version does not fully validate ML-DSA keys,
+signatures and token hashes. Keep the existing RSA conformance runs as
+regression checks; they do not establish ML-DSA interoperability. Positive
+ML-DSA test evidence requires a capable PHP/OpenSSL runtime, rather than a run
+where every cryptographic case skips. See the checklist for the test command
+and the remaining coverage limits. Mixed RSA/EC/ML-DSA selection and manual
+protocol-key rollover are tested in the same suite, including verification of
+old tokens against the retained published keys. Focused grant tests redeem an
+encrypted authorization-code fixture and then refresh the issued tokens through
+the real server/grants for each variant; authentication-rule results and storage
+are doubles, so this does not cover browser login or real credential validation.
+
+Federation cases exercise Entity Configuration signing, published keys, metadata
+and manual key rollover for each variant. Mixed RSA/ML-DSA chains also exercise
+the library's chain builder and metadata-policy application, with the final
+subordinate-to-anchor signature explicitly verified by the test. The builder
+alone does not check that signature; these cases do not establish complete
+remote trust-chain validation or interoperability with another implementation.
+
 ## OpenID4VCI issuer plan
 
 CI also runs the OpenID Foundation's OpenID4VCI 1.0 issuer test plan,

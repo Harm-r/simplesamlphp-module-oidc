@@ -81,6 +81,15 @@ $config = [
 //            ModuleConfig::KEY_PRIVATE_KEY_PASSWORD => 'private-key-password', // Optional
 //            ModuleConfig::KEY_KEY_ID => 'ec-connect-signing-key-01', // Optional
 //        ],
+        // ML-DSA enum cases: MLDSA44, MLDSA65 and MLDSA87. Requires PHP 8.4+
+        // and an available OpenSSL ML-DSA provider; see the installation guide.
+        // Each variant needs its own matching PEM key pair. Example for ML-DSA-44:
+//        [
+//            ModuleConfig::KEY_ALGORITHM => \SimpleSAML\OpenID\Algorithms\SignatureAlgorithmEnum::MLDSA44,
+//            ModuleConfig::KEY_PRIVATE_KEY_FILENAME => 'oidc_module_connect_mldsa44_01.key',
+//            ModuleConfig::KEY_PUBLIC_KEY_FILENAME => 'oidc_module_connect_mldsa44_01.pub',
+//            ModuleConfig::KEY_KEY_ID => 'mldsa44-connect-signing-key-01', // Optional
+//        ],
     ],
 
     /**
@@ -939,6 +948,14 @@ $config = [
 //            ModuleConfig::KEY_PRIVATE_KEY_PASSWORD => 'private-key-password', // Optional
 //            ModuleConfig::KEY_KEY_ID => 'rsa-federation-signing-key-01', // Optional
         ],
+        // MLDSA44, MLDSA65 and MLDSA87 use the same format and runtime requirements
+        // as protocol keys. Use a separate key pair for Federation. Example:
+//        [
+//            ModuleConfig::KEY_ALGORITHM => \SimpleSAML\OpenID\Algorithms\SignatureAlgorithmEnum::MLDSA44,
+//            ModuleConfig::KEY_PRIVATE_KEY_FILENAME => 'oidc_module_federation_mldsa44_01.key',
+//            ModuleConfig::KEY_PUBLIC_KEY_FILENAME => 'oidc_module_federation_mldsa44_01.pub',
+//            ModuleConfig::KEY_KEY_ID => 'mldsa44-federation-signing-key-01', // Optional
+//        ],
     ],
 
     /**

@@ -51,7 +51,7 @@ class OpMetadataService
         // Signature algorithms that this OP can use to validate signature on
         // signed JWS artifacts.
         $supportedSignatureAlgorithmNames = $this->moduleConfig
-            ->getSupportedAlgorithms()
+            ->getSupportedAlgorithms(includeMlDsa: true)
             ->getSignatureAlgorithmBag()
             ->getAllNamesUnique();
 
@@ -78,7 +78,11 @@ class OpMetadataService
         ));
         $this->metadata[ClaimsEnum::ResponseTypesSupported->value] = $this->moduleConfig->getSupportedResponseTypes();
         $this->metadata[ClaimsEnum::SubjectTypesSupported->value] = ['public'];
-        $this->metadata[ClaimsEnum::IdTokenSigningAlgValuesSupported->value] = $protocolSignatureAlgorithmNames;
+        // Advertise configured signing keys only for algorithms available in this runtime.
+        $this->metadata[ClaimsEnum::IdTokenSigningAlgValuesSupported->value] = array_values(array_intersect(
+            $protocolSignatureAlgorithmNames,
+            $supportedSignatureAlgorithmNames,
+        ));
         $this->metadata[ClaimsEnum::CodeChallengeMethodsSupported->value] = ['plain', 'S256'];
         $this->metadata[ClaimsEnum::TokenEndpointAuthMethodsSupported->value] =
         $this->moduleConfig->getSupportedTokenEndpointAuthMethods();

@@ -2,6 +2,15 @@
 
 This document shows how to run and test the module with Docker.
 
+For manual ML-DSA testing with Burp, use the separate
+[ML-DSA OP lab](../docker/mldsa/README.md). It serves a browser test page on
+`https://localhost:8443`, seeds PKCE clients for all three variants and keeps
+its keys and database separate from the conformance setup below.
+
+For interoperability testing with a real trust anchor and RP, use the
+[Lighthouse / SSP / OFFA lab](../docker/oidfed/README.md). It runs alongside
+the manual lab on port 9443 and protects a small application through OFFA.
+
 - Build the SimpleSAMLphp base image
 - Generate development certificates
 - Run with the current git branch (live mount)

@@ -24,7 +24,7 @@ class OAuth2Factory
     {
         return new OAuth2(
             supportedSerializers: $this->moduleConfig->getSupportedSerializers(),
-            supportedAlgorithms: $this->moduleConfig->getSupportedAlgorithms(),
+            supportedAlgorithms: $this->moduleConfig->getSupportedAlgorithms(includeMlDsa: true),
             timestampValidationLeeway: $this->moduleConfig->getTimestampValidationLeeway(),
         );
     }

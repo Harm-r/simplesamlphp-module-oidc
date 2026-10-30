@@ -50,6 +50,10 @@ class OpMetadataServiceTest extends TestCase
     protected MockObject $uiLocalesResolverMock;
 
     /** @var array<string, mixed> */
+    protected array $verificationAlgorithms = ['RS256'];
+
+    protected array $protocolAlgorithms = ['RS256'];
+
     protected array $scopes = ['openid' => 'openid'];
 
 
@@ -98,13 +102,14 @@ class OpMetadataServiceTest extends TestCase
 
         $this->signatureAlgorithmBag = $this->createMock(SignatureAlgorithmBag::class);
         $this->signatureAlgorithmBag->method('getAllNamesUnique')
-            ->willReturn(['RS256']);
+            ->willReturnCallback(fn(): array => $this->verificationAlgorithms);
 
         $this->supportedAlgorithmsMock = $this->createMock(SupportedAlgorithms::class);
         $this->supportedAlgorithmsMock->method('getSignatureAlgorithmBag')
             ->willReturn($this->signatureAlgorithmBag);
 
         $this->moduleConfigMock->method('getSupportedAlgorithms')
+            ->with(true)
             ->willReturn($this->supportedAlgorithmsMock);
 
         $this->signatureKeyPairMock = $this->createMock(SignatureKeyPair::class);
@@ -115,7 +120,7 @@ class OpMetadataServiceTest extends TestCase
         $this->signatureKeyPairBagMock->method('getAll')
             ->willReturn([$this->signatureKeyPairMock]);
         $this->signatureKeyPairBagMock->method('getAllAlgorithmNamesUnique')
-            ->willReturn(['RS256']);
+            ->willReturnCallback(fn(): array => $this->protocolAlgorithms);
 
         $this->moduleConfigMock->method('getProtocolSignatureKeyPairBag')
             ->willReturn($this->signatureKeyPairBagMock);
@@ -148,6 +153,47 @@ class OpMetadataServiceTest extends TestCase
             $routes,
             $uiLocalesResolver,
         );
+    }
+
+
+    public function testOmitsUnavailableAlgorithmsFromIdTokenDiscovery(): void
+    {
+        $this->protocolAlgorithms = ['RS256', 'ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'];
+        $this->verificationAlgorithms = ['RS256'];
+
+        $this->assertSame(
+            ['RS256'],
+            $this->sut()->getMetadata()[ClaimsEnum::IdTokenSigningAlgValuesSupported->value],
+        );
+    }
+
+
+    public function testAdvertisesMlDsaOnlyForImplementedOpenIdUses(): void
+    {
+        $this->verificationAlgorithms = ['RS256', 'ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'];
+        $this->protocolAlgorithms = $this->verificationAlgorithms;
+        $this->moduleConfigMock->method('getApiEnabled')->willReturn(true);
+        $this->moduleConfigMock->method('getApiOAuth2TokenIntrospectionEndpointEnabled')->willReturn(true);
+
+        $metadata = $this->sut()->getMetadata();
+
+        $this->assertSame(
+            $this->protocolAlgorithms,
+            $metadata[ClaimsEnum::IdTokenSigningAlgValuesSupported->value],
+        );
+        $this->assertSame(
+            $this->verificationAlgorithms,
+            $metadata[ClaimsEnum::TokenEndpointAuthSigningAlgValuesSupported->value],
+        );
+        $this->assertSame(
+            $this->verificationAlgorithms,
+            $metadata[ClaimsEnum::IntrospectionEndpointAuthSigningAlgValuesSupported->value],
+        );
+        $this->assertSame(
+            ['none', ...$this->verificationAlgorithms],
+            $metadata[ClaimsEnum::RequestObjectSigningAlgValuesSupported->value],
+        );
+        $this->assertSame(['ES256', 'RS256'], $metadata[ClaimsEnum::DpopSigningAlgValuesSupported->value]);
     }
 
 

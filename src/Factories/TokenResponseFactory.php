@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace SimpleSAML\Module\oidc\Factories;
 
-use League\OAuth2\Server\CryptKey;
+use League\OAuth2\Server\CryptKeyInterface;
 use SimpleSAML\Module\oidc\ModuleConfig;
 use SimpleSAML\Module\oidc\Repositories\UserRepository;
 use SimpleSAML\Module\oidc\Server\ResponseTypes\TokenResponse;
@@ -17,7 +17,7 @@ class TokenResponseFactory
         private readonly ModuleConfig $moduleConfig,
         private readonly UserRepository $userRepository,
         private readonly IdTokenBuilder $idTokenBuilder,
-        private readonly CryptKey $privateKey,
+        private readonly CryptKeyInterface $privateKey,
         private readonly LoggerService $loggerService,
     ) {
     }

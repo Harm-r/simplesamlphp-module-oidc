@@ -20,7 +20,7 @@ class JwsFactory
     public function build(): Jws
     {
         return new Jws(
-            supportedAlgorithms: $this->moduleConfig->getSupportedAlgorithms(),
+            supportedAlgorithms: $this->moduleConfig->getSupportedAlgorithms(includeMlDsa: true),
             supportedSerializers: $this->moduleConfig->getSupportedSerializers(),
             timestampValidationLeeway: $this->moduleConfig->getTimestampValidationLeeway(),
             logger: $this->loggerService,

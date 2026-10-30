@@ -1,0 +1,66 @@
+name: oidfed-mldsa
+services:
+  op:
+    build: ../mldsa
+    image: oidfed-mldsa-op
+    command: [bash, /fed/op/start.sh]
+    environment:
+      MLDSA_DEFAULT_ALG: "${OIDFED_ALG:-ML-DSA-44}"
+    volumes:
+      - ../..:/workspace/simplesamlphp-module-oidc:ro
+      - ../../../openid:/workspace/openid:ro
+      - ../mldsa:/lab:ro
+      - .:/fed:ro
+      - ./op/config.php:/lab/config/config.php:ro
+      - ./op/module_oidc.php:/lab/config/module_oidc.php:ro
+      - ./op/apache.conf:/etc/apache2/sites-available/000-default.conf:ro
+      - ./op/php.ini:/usr/local/etc/php/conf.d/99-lab.ini:ro
+      - ../../build/oidfed-lab/pki/ca.crt:/pki/ca.crt:ro
+      - ../../build/oidfed-lab/pki/server.crt:/pki/server.crt:ro
+      - ../../build/oidfed-lab/pki/server.key:/pki/server.key:ro
+      - ../../build/oidfed-lab/shared:/shared:ro
+      - op-state:/state
+  lighthouse:
+    image: oidfed/lighthouse@sha256:5d7ada5551961476e141fc31b66ebfdb1176f62a7c19b684ca60715014e3f51f
+    ports: ["127.0.0.1:9763:7673"]
+    entrypoint: [sh, /fed/lighthouse-start.sh]
+    volumes:
+      - .:/fed:ro
+      - ../../build/oidfed-lab/lighthouse.yml:/config.yaml:ro
+      - ../../build/oidfed-lab/pki/ca.crt:/usr/local/share/ca-certificates/oidfed-lab.crt:ro
+      - lighthouse-state:/data
+  offa:
+    image: oidfed/offa@sha256:215521232b9684954d81ac902a9a0aaad36d29f0dd1b3ceb00684355002e3c50
+    entrypoint: [sh, /fed/offa-start.sh]
+    volumes:
+      - .:/fed:ro
+      - ../../build/oidfed-lab/offa.yml:/config.yaml:ro
+      - ../../build/oidfed-lab/pki/ca.crt:/usr/local/share/ca-certificates/oidfed-lab.crt:ro
+      - ../../build/oidfed-lab/shared:/shared:ro
+      - offa-state:/data
+  proxy:
+    image: nginx@sha256:51047bea59fed88fbd1f52565d2f5fabcb82d311cf6c9e507a10ce74bb3bc3f0
+    ports: ["127.0.0.1:9443:9443"]
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../../build/oidfed-lab/pki/ca.crt:/pki/ca.crt:ro
+      - ../../build/oidfed-lab/pki/server.crt:/pki/server.crt:ro
+      - ../../build/oidfed-lab/pki/server.key:/pki/server.key:ro
+    networks:
+      default:
+        aliases:
+          - ta.127.0.0.1.nip.io
+          - op.127.0.0.1.nip.io
+          - rp.127.0.0.1.nip.io
+          - app.127.0.0.1.nip.io
+  app:
+    image: python:3.11-alpine
+    command: [python, /app/app.py]
+    volumes: ["./app:/app:ro"]
+volumes:
+  op-state:
+    name: oidfed-mldsa-${OIDFED_ALG:-ML-DSA-44}-op-state
+  lighthouse-state:
+    name: oidfed-mldsa-${OIDFED_ALG:-ML-DSA-44}-lighthouse-state
+  offa-state:
+    name: oidfed-mldsa-${OIDFED_ALG:-ML-DSA-44}-offa-state

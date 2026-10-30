@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace SimpleSAML\Test\Module\oidc\unit\Factories;
 
-use League\OAuth2\Server\CryptKey;
+use League\OAuth2\Server\CryptKeyInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -55,7 +55,7 @@ class TokenResponseFactoryTest extends TestCase
 
         $this->userRepositoryMock = $this->createMock(UserRepository::class);
         $this->idTokenBuilderMock = $this->createMock(IdTokenBuilder::class);
-        $this->privateKeyMock = $this->createMock(CryptKey::class);
+        $this->privateKeyMock = $this->createMock(CryptKeyInterface::class);
         $this->loggerServiceMock = $this->createMock(LoggerService::class);
     }
 

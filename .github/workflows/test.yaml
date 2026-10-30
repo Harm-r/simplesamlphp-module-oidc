@@ -7,6 +7,49 @@ on:
     types: [opened, synchronize, reopened, closed]
 
 jobs:
+  ml-dsa-tests:
+    name: ML-DSA signing and verification
+    # 26.04 supplies OpenSSL 3.5+. The PHP-process probe below is still mandatory.
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: curl, gmp, mbstring, xml, pdo_sqlite
+          tools: composer:v2
+          coverage: none
+
+      - name: Install Composer dependencies
+        run: composer install --no-progress --prefer-dist --optimize-autoloader
+
+      - name: Require all ML-DSA variants in the PHP process
+        run: |
+          php <<'PHP'
+          <?php
+          require 'vendor/autoload.php';
+
+          use SimpleSAML\OpenID\Algorithms\SignatureAlgorithmEnum;
+
+          $available = true;
+          foreach (['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'] as $name) {
+              $supported = SignatureAlgorithmEnum::tryFrom($name)?->isSupported() ?? false;
+              printf("%s: %s\n", $name, $supported ? 'available' : 'unavailable');
+              $available = $available && $supported;
+          }
+          exit($available ? 0 : 1);
+          PHP
+
+      - name: Record the OpenID dependency revision
+        run: composer show simplesamlphp/openid
+
+      - name: Run focused tests without skipped cases
+        run: >-
+          vendor/bin/phpunit --no-coverage --fail-on-skipped
+          --filter 'MlDsaEntityStatementTest|MlDsaKeySelectionTest|MlDsaGrantTest|ModuleConfigMlDsaTest|IdTokenBuilderTest|AccessTokenEntityTest|JwksControllerTest|OpMetadataServiceTest|UnusedLeagueSigningKeyTest|AuthorizationServerFactoryTest'
+
   basic-tests:
     name: Syntax and unit tests, PHP ${{ matrix.php-versions }}, ${{ matrix.operating-system }}
     runs-on: [ubuntu-latest]

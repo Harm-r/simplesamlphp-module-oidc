@@ -1,0 +1,46 @@
+server:
+  port: 15661
+logging:
+  access:
+    stderr: true
+  internal:
+    level: debug
+    stderr: true
+sessions:
+  ttl: 3600
+  cookie_domain: 127.0.0.1.nip.io
+  cookie_name: oidfed-lab-offa
+signing:
+  key_storage: /data/keys
+  federation:
+    alg: '@ALG@'
+    generate_keys: true
+  oidc:
+    algs: ['@ALG@', RS256]
+    default_alg: '@ALG@'
+    generate_keys: true
+federation:
+  entity_id: https://rp.127.0.0.1.nip.io:9443
+  client_name: OFFA ML-DSA lab RP
+  display_name: OFFA ML-DSA lab RP
+  scopes: [openid, profile, email]
+  authority_hints: [https://ta.127.0.0.1.nip.io:9443]
+  trust_anchors:
+    - entity_id: https://ta.127.0.0.1.nip.io:9443
+      jwks_file: /shared/ta-jwks.json
+  client_registration_types: [automatic]
+  extra_rp_metadata:
+    id_token_signed_response_alg: '@ALG@'
+  external_resolver:
+    enabled: false
+op_discovery:
+  local:
+    enabled: true
+    use_entity_collection_endpoint: false
+  thiss.js:
+    enabled: false
+  external:
+    enabled: false
+auth:
+  - domain: app.127.0.0.1.nip.io
+    redirect_status: 401

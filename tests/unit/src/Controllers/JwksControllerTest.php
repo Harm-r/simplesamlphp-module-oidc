@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace SimpleSAML\Test\Module\oidc\unit\Controllers;
 
+use Jose\Component\KeyManagement\JWKFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use SimpleSAML\Error\ConfigurationError;
@@ -14,9 +16,15 @@ use SimpleSAML\Module\oidc\Controllers\JwksController;
 use SimpleSAML\Module\oidc\ModuleConfig;
 use SimpleSAML\Module\oidc\StatusList\Values\StatusListPoolBag;
 use SimpleSAML\Module\oidc\Utils\Routes;
+use SimpleSAML\OpenID\Algorithms\SignatureAlgorithmBag;
+use SimpleSAML\OpenID\Algorithms\SignatureAlgorithmEnum;
+use SimpleSAML\OpenID\Jwk\JwkDecorator;
 use SimpleSAML\OpenID\Jwks;
 use SimpleSAML\OpenID\Jwks\Factories\JwksDecoratorFactory;
 use SimpleSAML\OpenID\Jwks\JwksDecorator;
+use SimpleSAML\OpenID\SupportedAlgorithms;
+use SimpleSAML\OpenID\ValueAbstracts\KeyPair;
+use SimpleSAML\OpenID\ValueAbstracts\SignatureKeyPair;
 use SimpleSAML\OpenID\ValueAbstracts\SignatureKeyPairBag;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
@@ -107,6 +115,64 @@ class JwksControllerTest extends TestCase
             $keys,
             json_decode((string) $this->mock()->__invoke()->getContent(), true),
         );
+    }
+
+
+    public static function mlDsaAlgorithmProvider(): array
+    {
+        return [
+            [SignatureAlgorithmEnum::MLDSA44],
+            [SignatureAlgorithmEnum::MLDSA65],
+            [SignatureAlgorithmEnum::MLDSA87],
+        ];
+    }
+
+
+    #[DataProvider('mlDsaAlgorithmProvider')]
+    public function testPublishesUsableMlDsaPublicKeysWithoutPrivateMaterial(SignatureAlgorithmEnum $algorithm): void
+    {
+        if (!$algorithm->isSupported()) {
+            $this->markTestSkipped($algorithm->value . ' is not supported by this PHP/OpenSSL runtime.');
+        }
+
+        $config = $this->createStub(ModuleConfig::class);
+        $config->method('getFederationEnabled')->willReturn(true);
+        $pairs = [];
+        foreach (['protocol', 'federation'] as $profile) {
+            $key = (new JWKFactory())->mldsa($algorithm->value);
+            $pairs[$profile] = new SignatureKeyPair($algorithm, new KeyPair(
+                new JwkDecorator($key),
+                new JwkDecorator($key->toPublic(), ['alg' => $algorithm->value, 'kid' => $profile, 'use' => 'sig']),
+                $profile,
+            ));
+        }
+        $config->method('getProtocolSignatureKeyPairBag')->willReturn(new SignatureKeyPairBag($pairs['protocol']));
+        $config->method('getFederationSignatureKeyPairBag')->willReturn(new SignatureKeyPairBag($pairs['federation']));
+        $jwks = new Jwks(new SupportedAlgorithms(new SignatureAlgorithmBag($algorithm)));
+        $controller = new JwksController($config, $jwks, $this->routesMock);
+        $response = $controller();
+        $this->assertSame(200, $response->getStatusCode());
+        $published = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertCount(2, $published['keys']);
+        $publicKeys = $jwks->jwksDecoratorFactory()->fromKeySetData($published);
+
+        foreach ($published['keys'] as $publicKey) {
+            $members = array_keys($publicKey);
+            sort($members);
+            $this->assertSame(['alg', 'kid', 'kty', 'pub', 'use'], $members);
+            $this->assertSame('AKP', $publicKey['kty']);
+            $this->assertSame($algorithm->value, $publicKey['alg']);
+            $this->assertSame('sig', $publicKey['use']);
+            $pair = $pairs[$publicKey['kid']];
+            $this->assertSame($pair->getKeyPair()->getPrivateKey()->jwk()->get('pub'), $publicKey['pub']);
+            $signed = $jwks->jwsDecoratorBuilder()->fromData(
+                $pair->getKeyPair()->getPrivateKey(),
+                $algorithm,
+                ['sub' => 'publication-test'],
+                ['kid' => $publicKey['kid']],
+            );
+            $this->assertTrue($jwks->jwsVerifierDecorator()->verifyWithKeySet($signed, $publicKeys, 0));
+        }
     }
 
 

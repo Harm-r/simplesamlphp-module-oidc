@@ -9,8 +9,8 @@ services:
       League\OAuth2\Server\Repositories\ClientRepositoryInterface: '@SimpleSAML\Module\oidc\Repositories\ClientRepository'
       League\OAuth2\Server\Repositories\AccessTokenRepositoryInterface: '@SimpleSAML\Module\oidc\Repositories\AccessTokenRepository'
       League\OAuth2\Server\Repositories\ScopeRepositoryInterface: '@SimpleSAML\Module\oidc\Repositories\ScopeRepository'
-      League\OAuth2\Server\CryptKey|string $privateKey: '@oidc.key.private'
-      League\OAuth2\Server\CryptKey|string $publicKey: '@oidc.key.public'
+      League\OAuth2\Server\CryptKeyInterface|string $privateKey: '@oidc.key.private'
+      League\OAuth2\Server\CryptKeyInterface|string $publicKey: '@oidc.key.public'
       Psr\Http\Message\ServerRequestFactoryInterface: '@Nyholm\Psr7\Factory\Psr17Factory'
       Psr\Http\Message\RequestFactoryInterface: '@Nyholm\Psr7\Factory\Psr17Factory'
       Psr\Http\Message\ResponseFactoryInterface: '@Nyholm\Psr7\Factory\Psr17Factory'
@@ -107,12 +107,10 @@ services:
     factory: ['SimpleSAML\Configuration', 'getInstance']
 
   oidc.key.private:
-    class: League\OAuth2\Server\CryptKey
-    factory: ['@SimpleSAML\Module\oidc\Factories\CryptKeyFactory', 'buildPrivateKey']
+    class: SimpleSAML\Module\oidc\Server\UnusedLeagueSigningKey
 
   oidc.key.public:
-    class: League\OAuth2\Server\CryptKey
-    factory: ['@SimpleSAML\Module\oidc\Factories\CryptKeyFactory', 'buildPublicKey']
+    class: SimpleSAML\Module\oidc\Server\UnusedLeagueSigningKey
 
   SimpleSAML\Module\oidc\Factories\AuthorizationServerFactory:
     arguments:

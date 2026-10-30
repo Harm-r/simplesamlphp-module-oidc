@@ -28,7 +28,7 @@ class JwksFactory
     public function build(): Jwks
     {
         return new Jwks(
-            supportedAlgorithms: $this->moduleConfig->getSupportedAlgorithms(),
+            supportedAlgorithms: $this->moduleConfig->getSupportedAlgorithms(includeMlDsa: true),
             maxCacheDuration: $this->moduleConfig->getFederationCacheMaxDurationForFetched(),
             cache: $this->federationCache?->cache,
             logger: $this->loggerService,

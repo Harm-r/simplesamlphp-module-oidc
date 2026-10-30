@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace SimpleSAML\Test\Module\oidc\unit\Factories;
 
 use DateInterval;
-use League\OAuth2\Server\CryptKey;
+use League\OAuth2\Server\CryptKeyInterface;
 use League\OAuth2\Server\ResponseTypes\ResponseTypeInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -29,6 +29,7 @@ use SimpleSAML\Module\oidc\Server\Grants\PreAuthCodeGrant;
 use SimpleSAML\Module\oidc\Server\Grants\RefreshTokenGrant;
 use SimpleSAML\Module\oidc\Server\RequestRules\RequestRulesManager;
 use SimpleSAML\Module\oidc\Server\ResponseTypes\TokenResponse;
+use SimpleSAML\Module\oidc\Server\UnusedLeagueSigningKey;
 use SimpleSAML\Module\oidc\Services\LoggerService;
 use SimpleSAML\OpenID\Codebooks\GrantTypesEnum;
 
@@ -107,7 +108,7 @@ class AuthorizationServerFactoryTest extends TestCase
         $this->preAuthCodeGrantMock = $this->grantMock(PreAuthCodeGrant::class, GrantTypesEnum::PreAuthorizedCode);
         $this->tokenResponseMock = $this->createMock(TokenResponse::class);
         $this->requestRulesManagerMock = $this->createMock(RequestRulesManager::class);
-        $this->privateKeyMock = $this->createMock(CryptKey::class);
+        $this->privateKeyMock = $this->createMock(CryptKeyInterface::class);
         $this->loggerServiceMock = $this->createMock(LoggerService::class);
         $this->pushedAuthorizationRequestRepositoryMock = $this->createMock(
             PushedAuthorizationRequestRepository::class,
@@ -145,8 +146,11 @@ class AuthorizationServerFactoryTest extends TestCase
      *
      * @param \SimpleSAML\OpenID\Codebooks\GrantTypesEnum[] $disabledGrantTypes
      */
-    protected function sut(bool $vciEnabled = false, array $disabledGrantTypes = []): AuthorizationServerFactory
-    {
+    protected function sut(
+        bool $vciEnabled = false,
+        array $disabledGrantTypes = [],
+        ?CryptKeyInterface $privateKey = null,
+    ): AuthorizationServerFactory {
         $this->moduleConfigMock->method('getVciEnabled')->willReturn($vciEnabled);
         $this->moduleConfigMock->method('isGrantTypeEnabled')->willReturnCallback(
             fn(GrantTypesEnum $grantType): bool => !in_array($grantType, $disabledGrantTypes, true),
@@ -162,11 +166,19 @@ class AuthorizationServerFactoryTest extends TestCase
             $this->refreshTokenGrantMock,
             $this->tokenResponseMock,
             $this->requestRulesManagerMock,
-            $this->privateKeyMock,
+            $privateKey ?? $this->privateKeyMock,
             $this->preAuthCodeGrantMock,
             $this->loggerServiceMock,
             $this->pushedAuthorizationRequestRepositoryMock,
         );
+    }
+
+
+    public function testBuildsWithoutReadingLeagueKeyMaterial(): void
+    {
+        $key = new UnusedLeagueSigningKey();
+        $this->authCodeGrantMock->expects($this->once())->method('setPrivateKey')->with($key);
+        $this->assertInstanceOf(AuthorizationServer::class, $this->sut(privateKey: $key)->build());
     }
 
 

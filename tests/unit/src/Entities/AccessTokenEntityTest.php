@@ -16,6 +16,7 @@ use SimpleSAML\Module\oidc\Entities\AccessTokenEntity;
 use SimpleSAML\Module\oidc\Entities\ClientEntity;
 use SimpleSAML\Module\oidc\Entities\ScopeEntity;
 use SimpleSAML\Module\oidc\ModuleConfig;
+use SimpleSAML\Module\oidc\Server\UnusedLeagueSigningKey;
 use SimpleSAML\OpenID\Algorithms\SignatureAlgorithmBag;
 use SimpleSAML\OpenID\Algorithms\SignatureAlgorithmEnum;
 use SimpleSAML\OpenID\Codebooks\ClaimsEnum;
@@ -196,15 +197,18 @@ class AccessTokenEntityTest extends TestCase
      *
      * @return array{0: \SimpleSAML\OpenID\OAuth2, 1: \SimpleSAML\Module\oidc\ModuleConfig}
      */
-    protected function realOAuth2AndModuleConfig(): array
-    {
+    protected function realOAuth2AndModuleConfig(
+        SignatureAlgorithmEnum $algorithm = SignatureAlgorithmEnum::ES256,
+    ): array {
         $oAuth2 = new OAuth2(
-            supportedAlgorithms: new SupportedAlgorithms(new SignatureAlgorithmBag(SignatureAlgorithmEnum::ES256)),
+            supportedAlgorithms: new SupportedAlgorithms(new SignatureAlgorithmBag($algorithm)),
         );
 
-        $jwk = JWKFactory::createECKey('P-256');
+        $jwk = $algorithm === SignatureAlgorithmEnum::ES256
+        ? JWKFactory::createECKey('P-256')
+        : (new JWKFactory())->mldsa($algorithm->value);
         $signatureKeyPair = new SignatureKeyPair(
-            SignatureAlgorithmEnum::ES256,
+            $algorithm,
             new KeyPair(new JwkDecorator($jwk), new JwkDecorator($jwk->toPublic()), 'kid123'),
         );
         $signatureKeyPairBagMock = $this->createMock(SignatureKeyPairBag::class);
@@ -556,6 +560,43 @@ class AccessTokenEntityTest extends TestCase
         $this->assertSame($this->expiryDateTime->getTimestamp(), $jwtAccessToken->getExpirationTime());
         $this->assertSame('v1@example.org', $jwtAccessToken->getPayloadClaim('voperson_id'));
         $this->assertSame(['e1', 'e2'], $jwtAccessToken->getPayloadClaim('eduperson_entitlement'));
+    }
+
+
+    #[DataProvider('mlDsaAlgorithmProvider')]
+    public function testMintsMlDsaAccessTokenWithLeagueKey(SignatureAlgorithmEnum $algorithm): void
+    {
+        if (!$algorithm->isSupported()) {
+            $this->markTestSkipped($algorithm->value . ' is not supported by this PHP/OpenSSL runtime.');
+        }
+
+        [$oAuth2, $moduleConfig] = $this->realOAuth2AndModuleConfig($algorithm);
+        $keyPair = $moduleConfig->getProtocolSignatureKeyPairBag()->getFirstOrFail()->getKeyPair();
+        $accessToken = new AccessTokenEntity(
+            $this->id,
+            $this->clientEntityStub,
+            $this->scopes,
+            $this->expiryDateTime,
+            $oAuth2,
+            $moduleConfig,
+            $this->userId,
+        );
+        $accessToken->setPrivateKey(new UnusedLeagueSigningKey());
+        $token = $oAuth2->jwtAccessTokenFactory()->fromToken($accessToken->toString());
+
+        $this->assertSame($algorithm->value, $token->getHeaderClaim('alg'));
+        $this->assertSame($this->userId, $token->getSubject());
+        $token->verifyWithKeySet(['keys' => [$keyPair->getPublicKey()->jwk()->all()]]);
+    }
+
+
+    public static function mlDsaAlgorithmProvider(): array
+    {
+        return [
+            'ML-DSA-44' => [SignatureAlgorithmEnum::MLDSA44],
+            'ML-DSA-65' => [SignatureAlgorithmEnum::MLDSA65],
+            'ML-DSA-87' => [SignatureAlgorithmEnum::MLDSA87],
+        ];
     }
 
 

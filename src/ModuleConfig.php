@@ -912,9 +912,12 @@ class ModuleConfig
     }
 
 
-    public function getSupportedAlgorithms(): SupportedAlgorithms
+    /**
+     * ML-DSA is opt-in for OpenID JOSE services. Keep DPoP and credential profiles on their existing list.
+     */
+    public function getSupportedAlgorithms(bool $includeMlDsa = false): SupportedAlgorithms
     {
-        return new SupportedAlgorithms(
+        $supportedAlgorithms = new SupportedAlgorithms(
             new SignatureAlgorithmBag(
                 SignatureAlgorithmEnum::RS256,
                 SignatureAlgorithmEnum::RS384,
@@ -928,6 +931,21 @@ class ModuleConfig
                 SignatureAlgorithmEnum::EdDSA,
             ),
         );
+
+        if ($includeMlDsa) {
+            $algorithms = [
+                SignatureAlgorithmEnum::MLDSA44,
+                SignatureAlgorithmEnum::MLDSA65,
+                SignatureAlgorithmEnum::MLDSA87,
+            ];
+            foreach ($algorithms as $algorithm) {
+                if ($algorithm->isSupported()) {
+                    $supportedAlgorithms->getSignatureAlgorithmBag()->add($algorithm);
+                }
+            }
+        }
+
+        return $supportedAlgorithms;
     }
 
 

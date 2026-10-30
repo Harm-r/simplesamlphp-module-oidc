@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML-DSA OP lab</title>
+<style>
+body{font:16px system-ui;max-width:1000px;margin:3rem auto;padding:0 1rem;color:#17212b;background:#f6f8fa}button,select{font:inherit;padding:.5rem;margin:.25rem}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:white;border:1px solid #ddd;padding:1rem}a{color:#075dad}code{overflow-wrap:anywhere}
+</style>
+<h1>ML-DSA OP lab</h1>
+<p>Log in with <code>student / studentpass</code>. Use Burp's browser to capture authorization, token, refresh and UserInfo requests.</p>
+<p><a href="/.well-known/openid-configuration" target="_blank" rel="noopener">OIDC discovery</a> · <a id="jwks" target="_blank" rel="noopener">JWKS</a> · <a href="/.well-known/openid-federation" target="_blank" rel="noopener">Federation Entity Configuration</a> · <a href="/simplesaml/" target="_blank" rel="noopener">SimpleSAMLphp</a></p>
+<label>ID-token algorithm <select id="client"><option value="burp-44">ML-DSA-44</option><option value="burp-65">ML-DSA-65</option><option value="burp-87">ML-DSA-87</option><option value="burp-rsa">RS256</option><option value="burp-default">OP default</option></select></label>
+<button id="login" disabled>Authorize with S256 PKCE</button>
+<button id="redeem" disabled>Redeem authorization code</button>
+<button id="refresh" disabled>Refresh tokens</button>
+<button id="userinfo" disabled>UserInfo</button>
+<button id="clear">Clear local tokens</button>
+<p id="status">Loading discovery…</p>
+<h2>Token response</h2><pre id="tokens">No tokens yet.</pre>
+<h2>Decoded JWTs (decoding does not verify signatures)</h2><pre id="decoded">No tokens yet.</pre>
+<h2>UserInfo / errors</h2><pre id="details">No response yet.</pre>
+<script src="/lab.js"></script>
+</html>

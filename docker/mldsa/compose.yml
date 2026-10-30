@@ -1,0 +1,16 @@
+name: oidc-mldsa
+services:
+  op:
+    build: .
+    ports:
+      - "127.0.0.1:8443:443"
+    environment:
+      MLDSA_DEFAULT_ALG: "${MLDSA_DEFAULT_ALG:-ML-DSA-44}"
+    volumes:
+      - ../..:/workspace/simplesamlphp-module-oidc:ro
+      - ../../../openid:/workspace/openid:ro
+      - .:/lab:ro
+      - ./php.ini:/usr/local/etc/php/conf.d/99-lab.ini:ro
+      - state:/state
+volumes:
+  state:

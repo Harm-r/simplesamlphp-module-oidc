@@ -27,7 +27,7 @@ class RequestObjectFactory
     public function build(): RequestObject
     {
         return new RequestObject(
-            supportedAlgorithms: $this->moduleConfig->getSupportedAlgorithms(),
+            supportedAlgorithms: $this->moduleConfig->getSupportedAlgorithms(includeMlDsa: true),
             timestampValidationLeeway: $this->moduleConfig->getTimestampValidationLeeway(),
             logger: $this->loggerService,
             httpClientConfig: $this->moduleConfig->getProtocolHttpClientOptions(),

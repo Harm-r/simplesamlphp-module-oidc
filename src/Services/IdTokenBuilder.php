@@ -6,6 +6,7 @@ namespace SimpleSAML\Module\oidc\Services;
 
 use League\OAuth2\Server\Entities\AccessTokenEntityInterface;
 use League\OAuth2\Server\Entities\UserEntityInterface;
+use phpseclib3\Crypt\Hash;
 use RuntimeException;
 use SimpleSAML\Module\oidc\Entities\AccessTokenEntity;
 use SimpleSAML\Module\oidc\Entities\ClientEntity;
@@ -151,7 +152,18 @@ class IdTokenBuilder
      */
     public function generateAccessTokenHash(AccessTokenEntityInterface $accessToken, string $jwsAlgorithm): string
     {
-        if ($jwsAlgorithm === SignatureAlgorithmEnum::EdDSA->value) {
+        $isMlDsa = in_array($jwsAlgorithm, [
+            SignatureAlgorithmEnum::MLDSA44->value,
+            SignatureAlgorithmEnum::MLDSA65->value,
+            SignatureAlgorithmEnum::MLDSA87->value,
+        ], true);
+
+        if ($isMlDsa) {
+            // OpenID token hash guide: SHAKE256 with 64 output bytes, then keep the left-most 32 bytes.
+            // phpseclib's suffix is the output length in bits, so 512 requests 64 bytes.
+            $hashAlgorithm = 'shake256-512';
+            $hashByteLength = 32;
+        } elseif ($jwsAlgorithm === SignatureAlgorithmEnum::EdDSA->value) {
             $hashAlgorithm = 'sha512';
             $hashByteLength = 32; // 256 bits / 8
         } else {
@@ -173,14 +185,13 @@ class IdTokenBuilder
         }
 
         $accessTokenString = $accessToken->toString();
+        $digest = $isMlDsa
+        ? (new Hash($hashAlgorithm))->hash($accessTokenString)
+        : hash($hashAlgorithm, $accessTokenString, true);
 
         return $this->core->helpers()->base64Url()->encode(
             substr(
-                hash(
-                    $hashAlgorithm,
-                    $accessTokenString,
-                    true,
-                ),
+                $digest,
                 0,
                 $hashByteLength,
             ),

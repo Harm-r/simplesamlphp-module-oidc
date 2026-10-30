@@ -71,7 +71,7 @@ class JwksFactoryTest extends TestCase
         $this->destinationPolicy = new DestinationPolicy();
 
         $this->moduleConfigMock = $this->createMock(ModuleConfig::class);
-        $this->moduleConfigMock->method('getSupportedAlgorithms')->willReturn($this->supportedAlgorithms);
+        $this->moduleConfigMock->method('getSupportedAlgorithms')->with(true)->willReturn($this->supportedAlgorithms);
         $this->moduleConfigMock->method('getFederationCacheMaxDurationForFetched')
             ->willReturn($this->maxCacheDuration);
         $this->moduleConfigMock->method('getProtocolHttpClientOptions')

@@ -38,6 +38,7 @@ class FederationFactoryTest extends TestCase
         $this->loggerServiceMock = $this->createMock(LoggerService::class);
 
         $this->moduleConfigMock->method('getSupportedAlgorithms')
+            ->with(true)
             ->willReturn(new SupportedAlgorithms());
         $this->moduleConfigMock->method('getFederationCacheMaxDurationForFetched')
             ->willReturn(new DateInterval('PT6H'));

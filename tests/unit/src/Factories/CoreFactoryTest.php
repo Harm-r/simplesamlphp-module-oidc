@@ -46,7 +46,7 @@ class CoreFactoryTest extends TestCase
         $this->timestampValidationLeeway = new DateInterval('PT3M');
 
         $this->moduleConfigMock = $this->createMock(ModuleConfig::class);
-        $this->moduleConfigMock->method('getSupportedAlgorithms')->willReturn($this->supportedAlgorithms);
+        $this->moduleConfigMock->method('getSupportedAlgorithms')->with(true)->willReturn($this->supportedAlgorithms);
         $this->moduleConfigMock->method('getTimestampValidationLeeway')
             ->willReturn($this->timestampValidationLeeway);
 
