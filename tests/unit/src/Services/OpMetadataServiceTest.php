@@ -56,6 +56,9 @@ class OpMetadataServiceTest extends TestCase
 
     protected array $scopes = ['openid' => 'openid'];
 
+    /** @var string[] */
+    protected array $dpopAlgorithms = ['ES256', 'RS256'];
+
 
     /**
      * @throws \Exception
@@ -126,7 +129,8 @@ class OpMetadataServiceTest extends TestCase
             ->willReturn($this->signatureKeyPairBagMock);
 
         $this->moduleConfigMock->method('getRequestUriParameterSupported')->willReturn(true);
-        $this->moduleConfigMock->method('getDpopSigningAlgorithms')->willReturn(['ES256', 'RS256']);
+        $this->moduleConfigMock->method('getDpopSigningAlgorithms')
+            ->willReturnCallback(fn(): array => $this->dpopAlgorithms);
 
         $this->uiLocalesResolverMock = $this->createMock(UiLocalesResolver::class);
         $this->uiLocalesResolverMock->method('getSupportedUiLocales')->willReturn(['en', 'pt-BR']);
@@ -171,6 +175,7 @@ class OpMetadataServiceTest extends TestCase
     public function testAdvertisesMlDsaOnlyForImplementedOpenIdUses(): void
     {
         $this->verificationAlgorithms = ['RS256', 'ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'];
+        $this->dpopAlgorithms = $this->verificationAlgorithms;
         $this->protocolAlgorithms = $this->verificationAlgorithms;
         $this->moduleConfigMock->method('getApiEnabled')->willReturn(true);
         $this->moduleConfigMock->method('getApiOAuth2TokenIntrospectionEndpointEnabled')->willReturn(true);
@@ -193,7 +198,7 @@ class OpMetadataServiceTest extends TestCase
             ['none', ...$this->verificationAlgorithms],
             $metadata[ClaimsEnum::RequestObjectSigningAlgValuesSupported->value],
         );
-        $this->assertSame(['ES256', 'RS256'], $metadata[ClaimsEnum::DpopSigningAlgValuesSupported->value]);
+        $this->assertSame($this->dpopAlgorithms, $metadata[ClaimsEnum::DpopSigningAlgValuesSupported->value]);
     }
 
 

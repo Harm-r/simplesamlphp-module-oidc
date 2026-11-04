@@ -1,9 +1,9 @@
 # ML-DSA support
 
 This checklist covers ML-DSA signing and verification for OpenID Connect and
-OpenID Federation in this module, using the support added to
-`simplesamlphp/openid`. It does not include OpenID4VCI or DPoP unless their
-profiles are separately confirmed to permit ML-DSA.
+OpenID Federation and DPoP in this module, using the support added to
+`simplesamlphp/openid`. It does not enable ML-DSA credential proofs or credential
+Status Lists.
 
 ## Dependency and configuration
 
@@ -24,8 +24,12 @@ profiles are separately confirmed to permit ML-DSA.
 - [x] Review discovery and advertised algorithm lists. Add ML-DSA only where
   the relevant OpenID Connect or Federation metadata/profile permits it; keep
   unrelated algorithm lists (including DPoP) accurate. OpenID JOSE services opt
-  into runtime-supported variants; DPoP and credential lists remain unchanged.
+  into runtime-supported variants, including DPoP; credential lists remain unchanged.
   ID-token discovery includes configured ML-DSA keys when supported by the runtime.
+
+- [x] Accept and advertise runtime-supported ML-DSA DPoP algorithms. Cover all
+  three variants through real proof verification, access-token thumbprint binding,
+  tampered signatures, mismatched keys, incorrect `ath`, and replay rejection.
 
 ## League OAuth2 Server key compatibility
 
@@ -79,8 +83,8 @@ profiles are separately confirmed to permit ML-DSA.
 
 - [x] Ensure a CI job requires an ML-DSA-capable runtime so positive crypto
   coverage cannot silently turn into skipped cases.
-  `ml-dsa-tests` uses PHP 8.5 on Ubuntu 26.04, requires all three capability
-  probes and runs the focused suite with `--fail-on-skipped`. Composer loads
+  The existing `basic-tests` PHP 8.5 entry uses Ubuntu 26.04 and requires all
+  three capability probes before running the full suite. Composer loads
   the remote OpenID development branch through its VCS repository.
   The dependency's local ML-DSA changes still need publishing to that branch
   before a hosted run can pass; no GitHub Actions run was performed locally.
@@ -103,6 +107,12 @@ profiles are separately confirmed to permit ML-DSA.
   These runs used the installed local OpenID working copy. The ignored lock
   file and vendor tree still reflect that installation; updating them from VCS
   must wait for the dependency's ML-DSA changes to be published.
+
+
+Final steps:
+- [ ] Change to 4.3.0 branch of jwt-framework after release
+- [ ] Change to simplesamlphp/openid instead of Harm-r/openid
+- [ ] Remove github workflow php.yml temporary change
 
 
 

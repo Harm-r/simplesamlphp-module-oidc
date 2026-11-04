@@ -7,6 +7,7 @@ namespace SimpleSAML\Test\Module\oidc\unit\Server\Validators;
 use ArrayObject;
 use Closure;
 use DateInterval;
+use Iterator;
 use Jose\Component\Core\JWK;
 use Jose\Component\KeyManagement\JWKFactory;
 use Nyholm\Psr7\ServerRequest;
@@ -19,6 +20,8 @@ use PHPUnit\Framework\TestCase;
 use Psr\Cache\CacheItemInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use RuntimeException;
+use SimpleSAML\Configuration;
+use SimpleSAML\Module\oidc\Factories\OAuth2Factory;
 use SimpleSAML\Module\oidc\ModuleConfig;
 use SimpleSAML\Module\oidc\Server\Exceptions\OidcServerException;
 use SimpleSAML\Module\oidc\Server\Validators\DpopProofVerifier;
@@ -45,6 +48,8 @@ use Symfony\Component\Cache\Psr16Cache;
  */
 #[CoversClass(DpopProofVerifier::class)]
 #[UsesClass(VerifiedDpopProof::class)]
+#[UsesClass(ModuleConfig::class)]
+#[UsesClass(OAuth2Factory::class)]
 #[UsesClass(OidcServerException::class)]
 #[AllowMockObjectsWithoutExpectations]
 class DpopProofVerifierTest extends TestCase
@@ -244,6 +249,49 @@ class DpopProofVerifierTest extends TestCase
     protected function thumbprintOf(JWK $key): string
     {
         return $key->toPublic()->thumbprint('sha256');
+    }
+
+
+    /**
+     * @return \Iterator<string, array{\SimpleSAML\OpenID\Algorithms\SignatureAlgorithmEnum}>
+     */
+    public static function mlDsaAlgorithmProvider(): Iterator
+    {
+        yield 'ML-DSA-44' => [SignatureAlgorithmEnum::MLDSA44];
+        yield 'ML-DSA-65' => [SignatureAlgorithmEnum::MLDSA65];
+        yield 'ML-DSA-87' => [SignatureAlgorithmEnum::MLDSA87];
+    }
+
+
+    #[DataProvider('mlDsaAlgorithmProvider')]
+    public function testMlDsaProofAtTokenEndpointAndReplay(SignatureAlgorithmEnum $algorithm): void
+    {
+        if (!$algorithm->isSupported()) {
+            $this->markTestSkipped($algorithm->value . ' is not supported by this PHP/OpenSSL runtime.');
+        }
+
+        $config = new ModuleConfig(sspConfig: $this->createStub(Configuration::class));
+        $this->oAuth2 = $this->signer = (new OAuth2Factory($config))->build();
+        $this->acceptedAlgorithms = $config->getDpopSigningAlgorithms();
+        $key = (new JWKFactory())->mldsa($algorithm->value);
+        $request = $this->request($this->proof(['ath' => null], $key, $algorithm));
+        $verifier = $this->sut();
+        $verified = $verifier->verify($request, self::RESOURCE_URL, null);
+
+        $this->assertNotNull($verified);
+        // RFC 9964 thumbprints use the canonical alg, kty and pub members, hashed with SHA-256.
+        $canonical = json_encode([
+            'alg' => $algorithm->value,
+            'kty' => 'AKP',
+            'pub' => $key->get('pub'),
+        ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $thumbprint = rtrim(strtr(base64_encode(hash('sha256', $canonical, true)), '+/', '-_'), '=');
+        $this->assertSame($thumbprint, $verified->getJwkThumbprint());
+
+        $exception = $this->refusalOf($request, null, $verifier);
+        $this->assertSame('invalid_dpop_proof', $exception->getErrorType());
+        $this->assertSame(400, $exception->getHttpStatusCode());
+        $this->assertStringContainsString('used before', (string)$exception->getHint());
     }
 
 

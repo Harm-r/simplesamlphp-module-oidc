@@ -4141,7 +4141,7 @@ class ModuleConfigTest extends TestCase
     public function testAcceptsDpopProofsSignedWithTheSupportedAlgorithms(): void
     {
         $this->assertSame(
-            ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512', 'PS256', 'PS384', 'PS512', 'EdDSA'],
+            $this->sut()->getSupportedAlgorithms(includeMlDsa: true)->getSignatureAlgorithmBag()->getAllNamesUnique(),
             $this->sut()->getDpopSigningAlgorithms(),
         );
     }

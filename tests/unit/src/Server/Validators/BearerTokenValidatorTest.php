@@ -6,6 +6,8 @@ namespace SimpleSAML\Test\Module\oidc\unit\Server\Validators;
 
 use Exception;
 use InvalidArgumentException;
+use Iterator;
+use Jose\Component\KeyManagement\JWKFactory;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\ServerRequest;
 use PDOException;
@@ -15,11 +17,13 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ServerRequestInterface;
 use RuntimeException;
+use SimpleSAML\Configuration;
 use SimpleSAML\Error\ConfigurationError;
 use SimpleSAML\Module\oidc\Entities\AccessTokenEntity;
 use SimpleSAML\Module\oidc\Entities\ClientEntity;
 use SimpleSAML\Module\oidc\Entities\Interfaces\ClientEntityInterface;
 use SimpleSAML\Module\oidc\Exceptions\TokenNotFoundException;
+use SimpleSAML\Module\oidc\Factories\OAuth2Factory;
 use SimpleSAML\Module\oidc\ModuleConfig;
 use SimpleSAML\Module\oidc\Repositories\AccessTokenRepository;
 use SimpleSAML\Module\oidc\Server\Exceptions\OidcServerException;
@@ -27,10 +31,12 @@ use SimpleSAML\Module\oidc\Server\Validators\BearerTokenValidator;
 use SimpleSAML\Module\oidc\Server\Validators\DpopProofVerifier;
 use SimpleSAML\Module\oidc\Services\LoggerService;
 use SimpleSAML\Module\oidc\ValueAbstracts\VerifiedDpopProof;
+use SimpleSAML\OpenID\Algorithms\SignatureAlgorithmEnum;
 use SimpleSAML\OpenID\Codebooks\ClaimsEnum;
 use SimpleSAML\OpenID\Exceptions\InvalidValueException;
 use SimpleSAML\OpenID\Exceptions\JwsException;
 use SimpleSAML\OpenID\Helpers;
+use SimpleSAML\OpenID\Jwk\JwkDecorator;
 use SimpleSAML\OpenID\Jwks;
 use SimpleSAML\OpenID\Jws;
 use SimpleSAML\OpenID\Jws\Factories\ParsedJwsFactory;
@@ -958,6 +964,79 @@ class BearerTokenValidatorTest extends TestCase
 
         $this->assertSame('accessToken123', $validated->getAttribute('oauth_access_token_id'));
         $this->assertSame('DPoP', $validated->getAttribute(BearerTokenValidator::ATTRIBUTE_ACCESS_TOKEN_SCHEME));
+    }
+
+
+    /**
+     * @return \Iterator<string, array{\SimpleSAML\OpenID\Algorithms\SignatureAlgorithmEnum, string}>
+     */
+    public static function mlDsaDpopProvider(): Iterator
+    {
+        foreach (
+            [
+                SignatureAlgorithmEnum::MLDSA44,
+                SignatureAlgorithmEnum::MLDSA65,
+                SignatureAlgorithmEnum::MLDSA87,
+            ] as $algorithm
+        ) {
+            foreach (['valid', 'wrong-key', 'tampered', 'wrong-ath'] as $scenario) {
+                yield $algorithm->value . ' ' . $scenario => [$algorithm, $scenario];
+            }
+        }
+    }
+
+
+    #[DataProvider('mlDsaDpopProvider')]
+    public function testMlDsaProofWithAccessTokenBinding(SignatureAlgorithmEnum $algorithm, string $scenario): void
+    {
+        if (!$algorithm->isSupported()) {
+            $this->markTestSkipped($algorithm->value . ' is not supported by this PHP/OpenSSL runtime.');
+        }
+
+        $config = new ModuleConfig(sspConfig: $this->createStub(Configuration::class));
+        $oAuth2 = (new OAuth2Factory($config))->build();
+        $key = (new JWKFactory())->mldsa($algorithm->value);
+        $bindingKey = $scenario === 'wrong-key' ? (new JWKFactory())->mldsa($algorithm->value) : $key;
+        $thumbprint = $bindingKey->toPublic()->thumbprint('sha256');
+        $this->bindParsedTokenTo([ClaimsEnum::Jkt->value => $thumbprint]);
+        $this->parsedJwsFactoryMock->method('fromToken')->willReturn($this->parsedJwsMock);
+
+        $proof = $oAuth2->dpopProofFactory()->fromData(new JwkDecorator($key), $algorithm, [
+            'jti' => 'ml-dsa-proof',
+            'htm' => 'GET',
+            'htu' => self::RESOURCE_URL,
+            'iat' => time(),
+            'ath' => DpopProof::accessTokenHash($scenario === 'wrong-ath' ? 'another-token' : $this->accessToken),
+        ])->getToken();
+        if ($scenario === 'tampered') {
+            $segments = explode('.', $proof);
+            $segments[2][0] = $segments[2][0] === 'A' ? 'B' : 'A';
+            $proof = implode('.', $segments);
+        }
+        $request = $this->dpopRequest()->withHeader('DPoP', $proof);
+        $verifier = new DpopProofVerifier($oAuth2, $config, null, $this->loggerServiceMock);
+        $tokenConfig = $this->createPartialMock(ModuleConfig::class, ['getProtocolSignatureKeyPairBag', 'getIssuer']);
+        $tokenConfig->method('getProtocolSignatureKeyPairBag')
+            ->willReturn($this->moduleConfigMock->getProtocolSignatureKeyPairBag());
+        $tokenConfig->method('getIssuer')->willReturn('issuer123');
+        $validator = $this->sut(moduleConfig: $tokenConfig, dpopProofVerifier: $verifier);
+
+        if ($scenario === 'valid') {
+            $validated = $validator->validateAuthorization($request);
+            $this->assertSame('DPoP', $validated->getAttribute(BearerTokenValidator::ATTRIBUTE_ACCESS_TOKEN_SCHEME));
+            $this->assertSame($this->accessTokenState['id'], $validated->getAttribute('oauth_access_token_id'));
+            return;
+        }
+
+        try {
+            $validator->validateAuthorization($request);
+            $this->fail('The proof must be refused.');
+        } catch (OidcServerException $exception) {
+            $error = $scenario === 'wrong-key' ? 'invalid_token' : 'invalid_dpop_proof';
+            $this->assertSame($error, $exception->getErrorType());
+            $this->assertSame(401, $exception->getHttpStatusCode());
+            $this->assertStringContainsString($algorithm->value, (string)$exception->getWwwAuthenticate());
+        }
     }
 
 

@@ -215,7 +215,7 @@ class MlDsaEntityStatementTest extends TestCase
         $this->assertSame(['RS256'], $metadata['id_token_signing_alg_values_supported']);
         $this->assertSame(['automatic'], $metadata['client_registration_types_supported']);
         $this->assertSame($config->getIssuer(), $metadata['issuer']);
-        $this->assertNotContains($algorithm->value, $metadata['dpop_signing_alg_values_supported']);
+        $this->assertContains($algorithm->value, $metadata['dpop_signing_alg_values_supported']);
     }
 
 

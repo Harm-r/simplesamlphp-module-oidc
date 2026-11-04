@@ -119,7 +119,7 @@ class ModuleConfigMlDsaTest extends TestCase
         $legacy = $config->getSupportedAlgorithms()->getSignatureAlgorithmBag()->getAllNamesUnique();
         $openId = $config->getSupportedAlgorithms(includeMlDsa: true)->getSignatureAlgorithmBag()->getAllNamesUnique();
 
-        $this->assertSame($legacy, $config->getDpopSigningAlgorithms());
+        $this->assertSame($openId, $config->getDpopSigningAlgorithms());
         $this->assertSame(array_values(array_intersect($openId, $legacy)), $legacy);
         $algorithms = [
             SignatureAlgorithmEnum::MLDSA44,

@@ -913,7 +913,7 @@ class ModuleConfig
 
 
     /**
-     * ML-DSA is opt-in for OpenID JOSE services. Keep DPoP and credential profiles on their existing list.
+     * ML-DSA is opt-in for OpenID JOSE services. Keep credential profiles on their existing list.
      */
     public function getSupportedAlgorithms(bool $includeMlDsa = false): SupportedAlgorithms
     {
@@ -951,13 +951,16 @@ class ModuleConfig
 
     /**
      * The names of the signature algorithms a DPoP proof may be signed with (RFC 9449 section 4.3, check 5): those
-     * of getSupportedAlgorithms(), every one of them asymmetric. A DPoP challenge names them (`algs`, section 7.1).
+     * of getSupportedAlgorithms(includeMlDsa: true), every one of them asymmetric.
+     * A DPoP challenge names them (`algs`, section 7.1).
      *
      * @return string[]
      */
     public function getDpopSigningAlgorithms(): array
     {
-        return array_values($this->getSupportedAlgorithms()->getSignatureAlgorithmBag()->getAllNamesUnique());
+        return array_values(
+            $this->getSupportedAlgorithms(includeMlDsa: true)->getSignatureAlgorithmBag()->getAllNamesUnique(),
+        );
     }
 
 

@@ -47,12 +47,12 @@ PHP 8.3, 8.4 and 8.5, with the following ML-DSA requirements:
 | 8.4 or 8.5, with an available ML-DSA provider | Supported by the library; check availability in the deployed PHP process. |
 
 Existing RSA/EC configurations retain their existing runtime requirements.
-The dedicated `ml-dsa-tests` CI job uses PHP 8.5 on
+The existing `basic-tests` CI job uses PHP 8.5 on
 [Ubuntu 26.04](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2604-Readme.md) and requires
-all three runtime probes to pass before running the focused tests with
-`--fail-on-skipped`. The general PHP matrix still permits unavailable crypto
-cases to skip. The Docker image inherits PHP/OpenSSL from its selected base
-image, so a successful Docker build alone does not establish ML-DSA availability.
+all three runtime probes to pass before running the full test suite.
+The other PHP matrix entries still permit unavailable crypto cases to skip.
+The Docker image inherits PHP/OpenSSL from its selected base image, so a
+successful Docker build alone does not establish ML-DSA availability.
 
 Run this check from the SimpleSAMLphp installation directory:
 
@@ -125,7 +125,8 @@ implementations, as described in
 | `introspection_endpoint_auth_signing_alg_values_supported` | Same as token endpoint authentication, while introspection is enabled. |
 | `id_token_signing_alg_values_supported` | Advertise algorithms from configured protocol keys that are supported by the runtime, including ML-DSA. |
 | Federation entity statements, generic JWS/JWKS and JWT access tokens | Enable runtime-supported variants; signing still requires a configured key. |
-| DPoP, credential proofs and credential Status Lists | Keep the existing algorithm policy; this change does not enable ML-DSA there. |
+| DPoP proofs and `dpop_signing_alg_values_supported` | Accept and advertise runtime-supported variants. |
+| Credential proofs and credential Status Lists | Keep the existing algorithm policy; this change does not enable ML-DSA there. |
 
 For ML-DSA ID tokens, `at_hash` uses SHAKE256 with 64 bytes of output,
 keeps the first 32 bytes, and base64url-encodes them without padding, following
@@ -136,8 +137,10 @@ length. Existing RSA/EC and EdDSA hash calculations are unchanged.
 OIDC Discovery requires `RS256` in the ID-token algorithm list, so retain an
 RS256 protocol key for [Discovery compliance](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata).
 
-Keeping DPoP unchanged is a scope and local-policy decision, rather than a claim
-that ML-DSA is forbidden by DPoP. [RFC 9449 section 4.3](https://www.rfc-editor.org/rfc/rfc9449.html#section-4.3)
+DPoP accepts ML-DSA proofs when the runtime supports them. The proof key is
+supplied by the client; no ML-DSA protocol signing key needs to be configured.
+DPoP `ath` and `cnf.jkt` still use SHA-256, independently of the proof signature
+algorithm. [RFC 9449 section 4.3](https://www.rfc-editor.org/rfc/rfc9449.html#section-4.3)
 requires an asymmetric registered algorithm that the application supports and
 accepts under its local policy.
 
