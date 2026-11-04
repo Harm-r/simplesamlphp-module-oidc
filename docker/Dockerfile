@@ -23,6 +23,9 @@ ADD . /var/simplesamlphp/staging-modules/oidc
 
 RUN git config --global --add safe.directory '*'
 RUN /opt/simplesaml/staging-install.sh
+# Composer ignores repositories declared by dependencies. Register the OpenID
+# development fork in the SimpleSAMLphp root until ML-DSA support is released.
+RUN composer --working-dir=/var/simplesamlphp config repositories.openid-ml-dsa vcs https://github.com/Harm-r/openid.git
 RUN /opt/simplesaml/module-setup.sh
 ADD docker/ssp/module_oidc.php /var/simplesamlphp/config/module_oidc.php
 ADD docker/ssp/authsources.php /var/simplesamlphp/config/authsources.php

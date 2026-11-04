@@ -9,8 +9,10 @@ ENV STAGINGCOMPOSERREPOS=oidc \
     COMPOSER_REQUIRE="simplesamlphp/simplesamlphp-module-oidc:@dev"
 COPY . /var/simplesamlphp/staging-modules/oidc
 
+# Dependency repository declarations do not propagate to the SSP root.
 RUN git config --global --add safe.directory '*' \
     && /opt/simplesaml/staging-install.sh \
+    && composer --working-dir=/var/simplesamlphp config repositories.openid-ml-dsa vcs https://github.com/Harm-r/openid.git \
     && /opt/simplesaml/module-setup.sh
 
 # Installed once, here: a container starting from this image runs no Composer.
