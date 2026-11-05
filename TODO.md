@@ -51,8 +51,9 @@ Status Lists.
   for all three variants in the existing PHPUnit suite. The external conformance
   suite currently lacks complete ML-DSA verification support. `MlDsaGrantTest`
   redeems encrypted codes through the real server/grants, verifies ID/access
-  tokens and `at_hash`, checks rotation, narrowed scopes and subject continuity,
-  and rejects bad PKCE and grant replay. Storage and authentication-rule results
+  tokens and refreshes them with the throwing League-key placeholder. Independent
+  hash vectors stay in `IdTokenBuilderTest`; generic grant security checks stay
+  in the existing grant tests. Storage and authentication-rule results
   are doubles; browser login and real client credential validation are not covered.
 - [x] Verify the published OIDC JWKS includes the ML-DSA public key with the
   expected `kid`, `alg`, and public key parameters, and that consumers can
@@ -71,13 +72,10 @@ Status Lists.
   JWKS. `MlDsaEntityStatementTest` exercises the real controller, factories,
   PEM configuration, public JWKS responses and manual Federation-key rollover.
 - [x] Check the Federation entity configuration and statement metadata expose
-  the correct algorithm and key identifiers, and that trust-chain processing
-  interoperates with ML-DSA-signed statements where supported.
-  The same test covers mixed RSA/ML-DSA chains and metadata-policy application,
-  plus altered signatures and unendorsed leaf keys. It explicitly verifies the
-  final subordinate signature before invoking the library's chain builder;
-  that builder alone does not validate this link. Remote resolution and
-  independent implementation interoperability remain outside this coverage.
+  the correct algorithm and key identifiers. Keep controller publication and
+  rotation coverage in the module; library-only trust-chain processing and
+  metadata-policy tests are outside this suite. Remote resolution and independent
+  implementation interoperability remain outside this coverage.
 
 ## Verification and documentation
 

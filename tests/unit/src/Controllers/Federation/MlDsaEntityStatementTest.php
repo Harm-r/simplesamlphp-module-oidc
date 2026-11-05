@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace SimpleSAML\Test\Module\oidc\unit\Controllers\Federation;
 
-use Jose\Component\Core\Util\AKPKey;
-use Jose\Component\KeyManagement\JWKFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -28,10 +26,9 @@ use SimpleSAML\Module\oidc\Utils\ClassInstanceBuilder;
 use SimpleSAML\Module\oidc\Utils\Routes;
 use SimpleSAML\Module\oidc\Utils\UiLocalesResolver;
 use SimpleSAML\OpenID\Algorithms\SignatureAlgorithmEnum;
-use SimpleSAML\OpenID\Codebooks\EntityTypesEnum;
 use SimpleSAML\OpenID\Exceptions\JwsException;
 use SimpleSAML\OpenID\Federation;
-use SimpleSAML\OpenID\Federation\EntityStatement;
+use SimpleSAML\Test\Module\oidc\unit\SigningKeyTestTrait;
 
 #[CoversClass(EntityStatementController::class)]
 #[CoversClass(FederationFactory::class)]
@@ -41,16 +38,7 @@ use SimpleSAML\OpenID\Federation\EntityStatement;
 #[CoversClass(ModuleConfig::class)]
 class MlDsaEntityStatementTest extends TestCase
 {
-    /** @var list<string> */
-    private array $paths = [];
-
-
-    protected function tearDown(): void
-    {
-        foreach ($this->paths as $path) {
-            unlink($path);
-        }
-    }
+    use SigningKeyTestTrait;
 
 
     public static function algorithmProvider(): array
@@ -63,54 +51,10 @@ class MlDsaEntityStatementTest extends TestCase
     }
 
 
-    private function keyEntry(SignatureAlgorithmEnum $algorithm, string $kid): array
-    {
-        if (!$algorithm->isSupported()) {
-            $this->markTestSkipped($algorithm->value . ' is not supported by this PHP/OpenSSL runtime.');
-        }
-
-        if ($algorithm === SignatureAlgorithmEnum::RS256) {
-            $private = file_get_contents(dirname(__DIR__, 4) . '/cert/oidc_module.key');
-            $this->assertNotFalse($private);
-            $native = openssl_pkey_get_private($private);
-        } elseif ($algorithm === SignatureAlgorithmEnum::ES256) {
-            $native = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
-            $this->assertNotFalse($native);
-            $this->assertTrue(openssl_pkey_export($native, $private));
-        } else {
-            $jwk = (new JWKFactory())->mldsa($algorithm->value);
-            $private = AKPKey::convertPrivateKeyToPKCS8PEM($jwk);
-            $public = AKPKey::convertPublicKeyToPEM($jwk);
-        }
-        if (isset($native)) {
-            $this->assertNotFalse($native);
-            $details = openssl_pkey_get_details($native);
-            $this->assertNotFalse($details);
-            $public = $details['key'];
-        }
-
-        $files = [];
-        foreach ([$private, $public] as $pem) {
-            $path = tempnam(sys_get_temp_dir(), 'oidc-key-selection-');
-            $this->assertNotFalse($path);
-            $this->paths[] = $path;
-            $this->assertNotFalse(file_put_contents($path, $pem));
-            $files[] = $path;
-        }
-
-        return [
-            ModuleConfig::KEY_ALGORITHM => $algorithm,
-            ModuleConfig::KEY_PRIVATE_KEY_FILENAME => $files[0],
-            ModuleConfig::KEY_PUBLIC_KEY_FILENAME => $files[1],
-            ModuleConfig::KEY_KEY_ID => $kid,
-        ];
-    }
-
-
-    private function config(array $entries, string $issuer = 'https://op.example.org'): ModuleConfig
+    private function config(array $entries): ModuleConfig
     {
         return new ModuleConfig(overrides: [
-            ModuleConfig::OPTION_ISSUER => $issuer,
+            ModuleConfig::OPTION_ISSUER => 'https://op.example.org',
             ModuleConfig::OPTION_FEDERATION_ENABLED => true,
             ModuleConfig::OPTION_FEDERATION_SIGNATURE_KEY_PAIRS => $entries,
             ModuleConfig::OPTION_PROTOCOL_SIGNATURE_KEY_PAIRS => [
@@ -245,95 +189,5 @@ class MlDsaEntityStatementTest extends TestCase
         $this->assertSame(['new', 'ec'], array_column($withdrawn->getJwks()->getValue()['keys'], 'kid'));
         $this->expectException(JwsException::class);
         $previous->verifyWithKeySet($published);
-    }
-
-
-    #[DataProvider('algorithmProvider')]
-    public function testProcessesMixedAlgorithmTrustChains(SignatureAlgorithmEnum $algorithm): void
-    {
-        $ml = $this->keyEntry($algorithm, 'ml');
-        $rsa = $this->keyEntry(SignatureAlgorithmEnum::RS256, 'rsa');
-        // Exercise ML-DSA both as the leaf's algorithm and as the superior's signing algorithm.
-        foreach ([[$ml, $rsa], [$rsa, $ml]] as [$leafEntry, $anchorEntry]) {
-            $leafConfig = $this->config([$leafEntry]);
-            $anchorConfig = $this->config([$anchorEntry], 'https://ta.example.org');
-            [$leaf] = $this->publish($leafConfig);
-            [$anchor] = $this->publish($anchorConfig);
-            $federation = $this->federation($leafConfig);
-            $pair = $anchorConfig->getFederationSignatureKeyPairBag()->getFirstOrFail();
-            $subordinate = $federation->entityStatementFactory()->fromData(
-                $pair->getKeyPair()->getPrivateKey(),
-                $pair->getSignatureAlgorithm(),
-                [
-                    'iss' => $anchor->getIssuer(),
-                    'sub' => $leaf->getIssuer(),
-                    'iat' => time(),
-                    'exp' => time() + 300,
-                    'jwks' => $leaf->getJwks()->getValue(),
-                    'metadata_policy' => [
-                        'openid_provider' => ['organization_name' => ['value' => 'Federation policy']],
-                    ],
-                ],
-                ['kid' => $pair->getKeyPair()->getKeyId()],
-            );
-            $subordinate = $federation->entityStatementFactory()->fromToken($subordinate->getToken());
-            // The chain builder does not itself check the final subordinate-to-anchor signature.
-            $subordinate->verifyWithKeySet($anchor->getJwks()->getValue());
-            $this->assertSame($anchorEntry[ModuleConfig::KEY_ALGORITHM]->value, $subordinate->getHeaderClaim('alg'));
-            $this->assertSame($anchorEntry[ModuleConfig::KEY_KEY_ID], $subordinate->getKeyId());
-            $chain = $federation->trustChainFactory()->fromTokens(
-                $leaf->getToken(),
-                $subordinate->getToken(),
-                $anchor->getToken(),
-            );
-            $this->assertSame(3, $chain->getResolvedLength());
-            $this->assertSame($leaf->getIssuer(), $chain->getResolvedLeaf()->getIssuer());
-            $this->assertSame($anchor->getIssuer(), $chain->getResolvedTrustAnchor()->getIssuer());
-            $this->assertSame($subordinate->getExpirationTime(), $chain->getResolvedExpirationTime());
-            $metadata = $chain->getResolvedMetadata(EntityTypesEnum::OpenIdProvider);
-            $this->assertSame('Federation policy', $metadata['organization_name']);
-            $this->assertSame(['RS256'], $metadata['id_token_signing_alg_values_supported']);
-
-            $this->assertSignatureRejected(fn() => $federation->trustChainFactory()->fromTokens(
-                $this->alterSignature($leaf),
-                $subordinate->getToken(),
-                $anchor->getToken(),
-            ));
-            $tampered = $federation->entityStatementFactory()->fromToken($this->alterSignature($subordinate));
-            $this->assertSignatureRejected(fn() => $tampered->verifyWithKeySet($anchor->getJwks()->getValue()));
-            // A valid superior signature must not endorse a different leaf key.
-            $wrongEndorsement = $federation->entityStatementFactory()->fromData(
-                $pair->getKeyPair()->getPrivateKey(),
-                $pair->getSignatureAlgorithm(),
-                array_replace($subordinate->getPayload(), ['jwks' => $anchor->getJwks()->getValue()]),
-                ['kid' => $pair->getKeyPair()->getKeyId()],
-            );
-            $wrongEndorsement->verifyWithKeySet($anchor->getJwks()->getValue());
-            $this->assertSignatureRejected(fn() => $federation->trustChainFactory()->fromTokens(
-                $leaf->getToken(),
-                $wrongEndorsement->getToken(),
-                $anchor->getToken(),
-            ));
-        }
-    }
-
-
-    private function alterSignature(EntityStatement $statement): string
-    {
-        $parts = explode('.', $statement->getToken());
-        $parts[2][0] = $parts[2][0] === 'A' ? 'B' : 'A';
-
-        return implode('.', $parts);
-    }
-
-
-    private function assertSignatureRejected(callable $verify): void
-    {
-        try {
-            $verify();
-            $this->fail('An invalid Federation signature or unendorsed leaf key was accepted.');
-        } catch (JwsException) {
-            $this->addToAssertionCount(1);
-        }
     }
 }

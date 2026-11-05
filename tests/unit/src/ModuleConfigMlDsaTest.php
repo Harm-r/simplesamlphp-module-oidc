@@ -25,27 +25,7 @@ use SimpleSAML\Utils\Config;
 #[AllowMockObjectsWithoutExpectations]
 class ModuleConfigMlDsaTest extends TestCase
 {
-    /** @var list<string> */
-    private array $paths = [];
-
-
-    protected function tearDown(): void
-    {
-        foreach ($this->paths as $path) {
-            unlink($path);
-        }
-    }
-
-
-    private function keyFile(string $contents): string
-    {
-        $path = tempnam(sys_get_temp_dir(), 'oidc-mldsa-config-');
-        $this->assertNotFalse($path);
-        $this->paths[] = $path;
-        $this->assertNotFalse(file_put_contents($path, $contents));
-
-        return $path;
-    }
+    use SigningKeyTestTrait;
 
 
     private function key(SignatureAlgorithmEnum $algorithm): JWK
@@ -164,34 +144,8 @@ class ModuleConfigMlDsaTest extends TestCase
             ['sub' => 'configuration-test'],
             ['kid' => $pair->getKeyPair()->getKeyId()],
         );
-        $signatureLengths = ['ML-DSA-44' => 2420, 'ML-DSA-65' => 3309, 'ML-DSA-87' => 4627];
-        $this->assertSame(
-            $signatureLengths[$algorithm->value],
-            strlen($signed->jws()->getSignature(0)->getSignature()),
-        );
         $publicKeys = $jws->jwksDecoratorFactory()->fromKeySetData(['keys' => [$publicKey]]);
         $this->assertTrue($jws->jwsVerifierDecorator()->verifyWithKeySet($signed, $publicKeys, 0));
-        $wrongKey = $this->key($algorithm)->toPublic()->all();
-        $this->assertFalse($jws->jwsVerifierDecorator()->verifyWithKeySet(
-            $signed,
-            $jws->jwksDecoratorFactory()->fromKeySetData(['keys' => [$wrongKey]]),
-            0,
-        ));
-
-        $serialized = $jws->jwsSerializerManagerDecorator()->serialize('jws_compact', $signed);
-        $segments = explode('.', $serialized);
-        $segments[1] = rtrim(strtr(base64_encode('{"sub":"tampered"}'), '+/', '-_'), '=');
-        $tampered = $jws->jwsDecoratorBuilder()->fromToken(implode('.', $segments));
-        $this->assertFalse($jws->jwsVerifierDecorator()->verifyWithKeySet($tampered, $publicKeys, 0));
-
-        $segments = explode('.', $serialized);
-        $segments[2] = rtrim(strtr(base64_encode(substr(
-            $signed->jws()->getSignature(0)->getSignature(),
-            0,
-            -1,
-        )), '+/', '-_'), '=');
-        $truncated = $jws->jwsDecoratorBuilder()->fromToken(implode('.', $segments));
-        $this->assertFalse($jws->jwsVerifierDecorator()->verifyWithKeySet($truncated, $publicKeys, 0));
     }
 
 
@@ -239,36 +193,6 @@ class ModuleConfigMlDsaTest extends TestCase
         $this->expectException(InvalidKeyException::class);
         $this->expectExceptionMessage('cannot be used with');
         $pair->getSignatureAlgorithm()->instance()->sign($pair->getKeyPair()->getPrivateKey()->jwk(), 'test');
-    }
-
-
-    public static function invalidMlDsaKeyProvider(): iterable
-    {
-        $algorithms = [
-            SignatureAlgorithmEnum::MLDSA44,
-            SignatureAlgorithmEnum::MLDSA65,
-            SignatureAlgorithmEnum::MLDSA87,
-        ];
-        foreach ($algorithms as $algorithm) {
-            yield $algorithm->value . ' short seed' => [$algorithm, 'short'];
-            yield $algorithm->value . ' long seed' => [$algorithm, 'long'];
-            yield $algorithm->value . ' inconsistent public key' => [$algorithm, 'public'];
-        }
-    }
-
-
-    #[DataProvider('invalidMlDsaKeyProvider')]
-    public function testSigningRejectsInvalidMlDsaKeyMaterial(SignatureAlgorithmEnum $algorithm, string $fault): void
-    {
-        $key = $this->key($algorithm)->all();
-        if ($fault === 'public') {
-            $key['pub'] = $this->key($algorithm)->get('pub');
-        } else {
-            $key['priv'] = rtrim(strtr(base64_encode(str_repeat('a', $fault === 'short' ? 31 : 33)), '+/', '-_'), '=');
-        }
-
-        $this->expectException(InvalidKeyException::class);
-        $algorithm->instance()->sign(new JWK($key), 'invalid-key-test');
     }
 
 

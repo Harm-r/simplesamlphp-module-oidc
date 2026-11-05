@@ -5,9 +5,6 @@ declare(strict_types=1);
 namespace SimpleSAML\Test\Module\oidc\unit\Services;
 
 use DateTimeImmutable;
-use Jose\Component\Core\Util\AKPKey;
-use Jose\Component\KeyManagement\JWKFactory;
-use phpseclib3\Crypt\Hash;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -31,6 +28,7 @@ use SimpleSAML\OpenID\Exceptions\JwsException;
 use SimpleSAML\OpenID\Exceptions\OpenIdException;
 use SimpleSAML\OpenID\Jwks;
 use SimpleSAML\OpenID\Jws\ParsedJws;
+use SimpleSAML\Test\Module\oidc\unit\SigningKeyTestTrait;
 
 #[CoversClass(ModuleConfig::class)]
 #[CoversClass(IdTokenBuilder::class)]
@@ -38,16 +36,7 @@ use SimpleSAML\OpenID\Jws\ParsedJws;
 #[CoversClass(JwksController::class)]
 class MlDsaKeySelectionTest extends TestCase
 {
-    /** @var list<string> */
-    private array $paths = [];
-
-
-    protected function tearDown(): void
-    {
-        foreach ($this->paths as $path) {
-            unlink($path);
-        }
-    }
+    use SigningKeyTestTrait;
 
 
     public static function algorithmProvider(): array
@@ -56,50 +45,6 @@ class MlDsaKeySelectionTest extends TestCase
             'ML-DSA-44' => [SignatureAlgorithmEnum::MLDSA44],
             'ML-DSA-65' => [SignatureAlgorithmEnum::MLDSA65],
             'ML-DSA-87' => [SignatureAlgorithmEnum::MLDSA87],
-        ];
-    }
-
-
-    private function keyEntry(SignatureAlgorithmEnum $algorithm, string $kid): array
-    {
-        if (!$algorithm->isSupported()) {
-            $this->markTestSkipped($algorithm->value . ' is not supported by this PHP/OpenSSL runtime.');
-        }
-
-        if ($algorithm === SignatureAlgorithmEnum::RS256) {
-            $private = file_get_contents(dirname(__DIR__, 3) . '/cert/oidc_module.key');
-            $this->assertNotFalse($private);
-            $native = openssl_pkey_get_private($private);
-        } elseif ($algorithm === SignatureAlgorithmEnum::ES256) {
-            $native = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
-            $this->assertNotFalse($native);
-            $this->assertTrue(openssl_pkey_export($native, $private));
-        } else {
-            $jwk = (new JWKFactory())->mldsa($algorithm->value);
-            $private = AKPKey::convertPrivateKeyToPKCS8PEM($jwk);
-            $public = AKPKey::convertPublicKeyToPEM($jwk);
-        }
-        if (isset($native)) {
-            $this->assertNotFalse($native);
-            $details = openssl_pkey_get_details($native);
-            $this->assertNotFalse($details);
-            $public = $details['key'];
-        }
-
-        $files = [];
-        foreach ([$private, $public] as $pem) {
-            $path = tempnam(sys_get_temp_dir(), 'oidc-key-selection-');
-            $this->assertNotFalse($path);
-            $this->paths[] = $path;
-            $this->assertNotFalse(file_put_contents($path, $pem));
-            $files[] = $path;
-        }
-
-        return [
-            ModuleConfig::KEY_ALGORITHM => $algorithm,
-            ModuleConfig::KEY_PRIVATE_KEY_FILENAME => $files[0],
-            ModuleConfig::KEY_PUBLIC_KEY_FILENAME => $files[1],
-            ModuleConfig::KEY_KEY_ID => $kid,
         ];
     }
 
@@ -180,11 +125,6 @@ class MlDsaKeySelectionTest extends TestCase
         $this->assertSame($accessKid, $tokens['access']->getKeyId());
         $this->assertSame($idAlgorithm->value, $tokens['id']->getHeaderClaim('alg'));
         $this->assertSame($idKid, $tokens['id']->getKeyId());
-        $digest = str_starts_with($idAlgorithm->value, 'ML-DSA-')
-        ? (new Hash('shake256-512'))->hash($tokens['access']->getToken())
-        : hash('sha256', $tokens['access']->getToken(), true);
-        $expected = rtrim(strtr(base64_encode(substr($digest, 0, strlen($digest) / 2)), '+/', '-_'), '=');
-        $this->assertSame($expected, $tokens['id']->getPayloadClaim('at_hash'));
     }
 
 
